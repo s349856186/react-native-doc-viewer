@@ -1,6 +1,6 @@
+package com.philipphecht;
 
 import java.io.File;
-
 import android.content.Context;
 import android.view.ViewGroup;
 import android.util.Log;
