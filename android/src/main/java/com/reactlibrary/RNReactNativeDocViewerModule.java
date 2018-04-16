@@ -1,14 +1,21 @@
-package com.philipphecht;
+package com.reactlibrary;
 
+import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Callback;
+import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.WritableNativeArray;
 import com.facebook.react.bridge.WritableNativeMap;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.uimanager.SimpleViewManager;
+import com.facebook.react.uimanager.ThemedReactContext;
+import com.facebook.react.uimanager.annotations.ReactProp;
+import com.facebook.react.uimanager.events.RCTEventEmitter;
 import com.facebook.react.views.webview.ReactWebViewManager;
 
 /* bridge react native
@@ -31,6 +38,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+
+import android.graphics.PointF;
 import android.support.v4.content.FileProvider;
 
 import android.content.ActivityNotFoundException;
@@ -38,11 +47,19 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.MimeTypeMap;
 import android.widget.Toast;
 import android.util.Log;
 import android.webkit.WebView;
+
+
+import com.github.barteksc.pdfviewer.PDFView;
+import com.github.barteksc.pdfviewer.listener.OnPageChangeListener;
+import com.github.barteksc.pdfviewer.listener.OnLoadCompleteListener;
+
+import static java.lang.String.format;
 
 public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
   public static final int ERROR_NO_HANDLER_FOR_DATA_TYPE = 53;
@@ -50,10 +67,17 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
   public static final int ERROR_UNKNOWN_ERROR = 1;
   private final ReactApplicationContext reactContext;
 
+  private PDFViewManager mPDFViewManager;
+  private String str;
+
   public RNReactNativeDocViewerModule(ReactApplicationContext reactContext) {
     super(reactContext);
     this.reactContext = reactContext;
+      mPDFViewManager = new PDFViewManager(reactContext);
+    //  pdfView = new PDFView(reactContext, null);
+      Log.d("PDFView111", mPDFViewManager.toString());
   }
+
 
   @Override
   public String getName() {
@@ -70,7 +94,7 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
             final String fileName =arg_object.getString("fileName");
             final String fileType =arg_object.getString("fileType");
             final Boolean cache =arg_object.getBoolean("cache");
-            final byte[] bytesData = new byte[0];
+            final byte[] bytesData = new byte[0]; 
             // Begin the Download Task
             new FileDownloaderAsyncTask(callback, url, cache, fileName, fileType, bytesData).execute();
         }else{
@@ -81,6 +105,26 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
        }
   }
 
+    @ReactMethod
+    public void openPdf(ReadableArray args, Callback callback) {
+        final ReadableMap arg_object = args.getMap(0);
+        try {
+            if (arg_object.getString("url") != null && arg_object.getString("fileName") != null) {
+                // parameter parsing
+                final String url = arg_object.getString("url");
+                final String fileName =arg_object.getString("fileName");
+                final String fileType =arg_object.getString("fileType");
+                final Boolean cache =arg_object.getBoolean("cache");
+                final byte[] bytesData = new byte[0];
+                // Begin the Download Task
+                new FileDownloaderAsyncTask(callback, url, cache, fileName, fileType, bytesData).execute();
+            }else{
+                callback.invoke(false);
+            }
+        } catch (Exception e) {
+            callback.invoke(e.getMessage());
+        }
+    }
 
   @ReactMethod
   public void openDocb64(ReadableArray args, Callback callback) {
@@ -104,7 +148,7 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
             callback.invoke(e.getMessage());
        }
 
-
+       
   }
 
   @ReactMethod
@@ -118,6 +162,7 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
             final String fileType =arg_object.getString("fileType");
             final Boolean cache =arg_object.getBoolean("cache");
             final byte[] bytesData = new byte[0];
+            Log.d("openDocBinaryinUrl=", url);
             // Begin the Download Task
             new FileDownloaderAsyncTask(callback, url, cache, fileName, fileType, bytesData).execute();
         }else{
@@ -211,16 +256,18 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
                 if (auth != null) {
                     conn.setRequestProperty("Cookie", auth);
                 }
+                System.out.println("==auth="+auth+"=="+cache);
 
                 InputStream reader = conn.getInputStream();
 
                 // use cache
                 File f = cache != null && cache ? new File(outputDir, fileName) : File.createTempFile(FILE_TYPE_PREFIX, "." + extension,
                         outputDir);
-
+            
                 // make sure the receiving app can read this file
                 f.setReadable(true, false);
-                System.out.println(f.getPath());
+                System.out.println("==f.getPath="+f.getPath());
+                str=f.getPath();
                 FileOutputStream outStream = new FileOutputStream(f);
 
                 /*int readBytes = reader.read(buffer);
@@ -249,8 +296,8 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
                 return f;
             }
 
-
-
+           
+           
 
         } catch (FileNotFoundException e) {
             e.printStackTrace();
@@ -289,7 +336,7 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
         private final Callback callback;
         private final String url;
         private final String fileName;
-        private final Boolean cache;
+        private final Boolean cache; 
         private final String fileType;
         private final byte[] bytesData;
 
@@ -307,9 +354,10 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
         @Override
         protected File doInBackground(Void... arg0) {
             if (!url.startsWith("file://")) {
-                System.out.println("Url to download" +url);
+                Log.d("Url to download", url);
                 return downloadFile(url, fileName, cache, fileType, bytesData, callback);
             } else {
+                Log.d("download file://", url);
                 File file = new File(url.replace("file://", ""));
                 return file;
             }
@@ -323,11 +371,10 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
             }
 
             Context context = getCurrentActivity();
-           String mimeType;
+           String mimeType="qwe";
             // mime type of file data
-            if (fileType != null) {
-                // If file type is already specified, should just take the mimeType from it
-                mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(fileType);
+            if (fileName != null && fileType != null) {
+               mimeType = getMimeType(fileName + "." +fileType);
             } else {
               mimeType = getMimeType(url);
             }
@@ -337,7 +384,7 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
             try {
 
                 Uri contentUri = FileProvider.getUriForFile(context, reactContext.getPackageName()+".docViewer_provider", result);
-                System.out.println("ContentUri");
+                System.out.println("ContentUri="+mimeType);
                 System.out.println(contentUri);
 
                 Intent intent = new Intent(Intent.ACTION_VIEW);
@@ -350,7 +397,14 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
                     // Thread-safe.
                     callback.invoke(null, fileName);
                 } else {
-                    activityNotFoundMessage("Activity not found to handle: " + contentUri.toString() + " (" + mimeType + ")");
+                    activityNotFoundMessage("Activity not found to handle: " + contentUri.toString() + " (" + fileName + ")");
+                    File pdfFile = new File(contentUri.toString());
+                  //  Log.d("mPDFViewManager", mPDFViewManager.toString());
+                 //   Log.d("pdfv", pdfView);
+                    mPDFViewManager = new PDFViewManager(reactContext);
+                    mPDFViewManager.pdfView = new PDFView(reactContext, null);
+                 //  mPDFViewManager.setAsset(mPDFViewManager.pdfView, contentUri.toString());
+                   mPDFViewManager.display2(true, str);
                 }
             } catch (ActivityNotFoundException e) {
                 activityNotFoundMessage(e.getMessage());
@@ -364,5 +418,156 @@ public class RNReactNativeDocViewerModule extends ReactContextBaseJavaModule {
             callback.invoke(message);
             //e.printStackTrace();
         }
+  }
+
+    public class PDFViewManager extends SimpleViewManager<PDFView> implements OnPageChangeListener,OnLoadCompleteListener {
+        private static final String REACT_CLASS = "RCTPDFViewAndroid";
+        private Context context;
+        public  PDFView pdfView;
+        Integer pageNumber = 0;
+        String assetName;
+        String filePath;
+
+
+        public PDFViewManager(ReactApplicationContext reactContext) {
+            this.context = reactContext;
+        }
+
+        @Override
+        public String getName() {
+            return REACT_CLASS;
+        }
+
+        @Override
+        public PDFView createViewInstance(ThemedReactContext context) {
+
+            if (pdfView == null) {
+                pdfView = new PDFView(context, null);
+
+            } else {
+                try {
+                    final ViewGroup parentView = (ViewGroup) pdfView.getParent();
+                    if (parentView != null) {
+                        parentView.removeView(pdfView);
+                    }
+                } catch (ClassCastException e) {
+                    System.out.println("does not has a parent");
+                }
+            }
+            Log.d("PDFView", pdfView.getPageCount()+"");
+            return pdfView;
+        }
+
+        @Override
+        public void onPageChanged(int page, int pageCount) {
+            pageNumber = page;
+            System.out.println(format("%s %s / %s", filePath, page, pageCount));
+        }
+
+        @Override
+        public void loadComplete(int nbPages) {
+            WritableMap event = Arguments.createMap();
+            event.putString("message", ""+nbPages);
+            ReactContext reactContext = (ReactContext)pdfView.getContext();
+            reactContext.getJSModule(RCTEventEmitter.class).receiveEvent(
+                    pdfView.getId(),
+                    "topChange",
+                    event
+            );
+        }
+
+        private void display2(boolean jumpToFirstPage, String ast) {
+            if (jumpToFirstPage) {
+                pageNumber = 1;
+            }
+            filePath=ast;
+            System.out.println("==assetName=="+assetName+"==filePath=="+filePath);
+            if (assetName != null) {
+                pdfView.fromAsset(assetName)
+                        .defaultPage(pageNumber)
+                        //.swipeVertical(true)
+                        .onPageChange(this)
+                        .onLoad(this)
+                        .load();
+            } else if (filePath != null){
+                //fromFile,fromAsset
+                //pdfView.fromAsset(fileName)
+                File pdfFile = new File(filePath);
+                pdfView.fromFile(pdfFile)
+                        .defaultPage(pageNumber)
+                        //.showMinimap(false)
+                        //.enableSwipe(true)
+                        //.swipeVertical(true)
+                        .onPageChange(this)
+                        .onLoad(this)
+                        .load();
+            }else{
+                System.out.println("===display===");
+            }
+        }
+
+        private void display(boolean jumpToFirstPage) {
+            if (jumpToFirstPage) {
+                pageNumber = 1;
+            }
+            System.out.println("==assetName=="+assetName+"==filePath=="+filePath);
+            if (assetName != null) {
+                pdfView.fromAsset(assetName)
+                        .defaultPage(pageNumber)
+                        //.swipeVertical(true)
+                        .onPageChange(this)
+                        .onLoad(this)
+                        .load();
+            } else if (filePath != null){
+                //fromFile,fromAsset
+                //pdfView.fromAsset(fileName)
+                File pdfFile = new File(filePath);
+                pdfView.fromFile(pdfFile)
+                        .defaultPage(pageNumber)
+                        //.showMinimap(false)
+                        //.enableSwipe(true)
+                        //.swipeVertical(true)
+                        .onPageChange(this)
+                        .onLoad(this)
+                        .load();
+            }else{
+                System.out.println("===display===");
+            }
+        }
+        @ReactProp(name = "asset")
+        public void setAsset(PDFView view, String ast) {
+            assetName = ast;
+            display(false);
+        }
+
+        @ReactProp(name = "pageNumber")
+        public void setPageNumber(PDFView view, Integer pageNum) {
+            //view.setPageNumber(pageNum);
+            if (pageNum >= 0){
+                pageNumber = pageNum;
+                display(false);
+            }
+        }
+
+        @ReactProp(name = "path")
+        public void setPath(PDFView view, String pth) {
+            filePath = pth;
+            display(false);
+        }
+
+        @ReactProp(name = "src")
+        public void setSrc(PDFView view, String src) {
+            //view.setSource(src);
+            filePath = src;
+            display(false);
+        }
+
+        @ReactProp(name = "zoom")
+        public void zoomTo(PDFView view, float zoomScale) {
+            PointF pivot = new PointF(zoomScale, zoomScale);
+            pdfView.zoomCenteredTo(zoomScale, pivot);
+        }
     }
 }
+
+
